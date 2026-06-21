@@ -30,7 +30,6 @@ export default function Desktop() {
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#05050A]" data-testid="desktop-root">
-      {/* Background layers */}
       <div className="absolute inset-0 bg-grid opacity-30" />
       <div className="absolute inset-0 bg-aurora" />
       <img
@@ -38,9 +37,8 @@ export default function Desktop() {
         alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-screen pointer-events-none"
       />
-      <div className="absolute inset-0 scanline opacity-50" />
+      <div className="absolute inset-0 scanline opacity-50 pointer-events-none" />
 
-      {/* Welcome holo */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0 text-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -55,15 +53,17 @@ export default function Desktop() {
 
       <TopBar />
 
-      <div className="absolute inset-0 pt-12 pb-24">
+      <div className="absolute inset-0 z-10 pointer-events-none">
         <AnimatePresence>
           {windows.map((w) => {
             const app = getApp(w.app);
             if (!app) return null;
             return (
-              <Window key={w.id} win={w}>
-                <app.Component />
-              </Window>
+              <div key={w.id} className="pointer-events-auto">
+                <Window win={w}>
+                  <app.Component />
+                </Window>
+              </div>
             );
           })}
         </AnimatePresence>
