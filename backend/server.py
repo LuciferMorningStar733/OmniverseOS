@@ -33,7 +33,22 @@ MAX_MESSAGE_LEN = 8000
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
-app = FastAPI(title="OmniverseOS API")
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # startup
+    await db.users.create_index("email", unique=True)
+    for coll in ("notes", "tasks", "events", "transactions", "memories", "files", "images"):
+        await db[coll].create_index([("user_id", 1), ("created_at", -1)])
+    await db.chat_messages.create_index([("user_id", 1), ("session_id", 1), ("created_at", 1)])
+    yield
+    # shutdown
+    client.close()
+
+
+app = FastAPI(title="OmniverseOS API", lifespan=lifespan)
 api = APIRouter(prefix="/api")
 security = HTTPBearer(auto_error=False)
 
@@ -544,19 +559,3 @@ else:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-@app.on_event("startup")
-async def ensure_indexes():
-    # Unique email for users (prevents race on duplicate signup)
-    await db.users.create_index("email", unique=True)
-    # Per-user listing indexes
-    for coll in ("notes", "tasks", "events", "transactions", "memories", "files", "images"):
-        await db[coll].create_index([("user_id", 1), ("created_at", -1)])
-    # Chat history lookup
-    await db.chat_messages.create_index([("user_id", 1), ("session_id", 1), ("created_at", 1)])
-
-
-@app.on_event("shutdown")
-async def shutdown_db():
-    client.close()
