@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import DemoBadge from "../components/DemoBadge";
 
 const shows = [
   { title: "Cyber Code", img: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400", genre: "Sci-Fi" },
@@ -25,6 +26,7 @@ export default function Watchlist() {
 
   return (
     <div className="h-full overflow-y-auto text-white" data-testid="watchlist-app">
+      <DemoBadge note="Static titles. Watchlist saves to your browser only." />
       <div className="relative h-60">
         <img src={feature.img} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#05050A] to-transparent" />

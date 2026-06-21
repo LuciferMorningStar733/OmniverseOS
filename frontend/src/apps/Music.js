@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import DemoBadge from "../components/DemoBadge";
 
 const tracks = [
   { title: "Neon Drift", artist: "Cyber Tokyo", duration: "3:42", cover: "https://images.pexels.com/photos/6440018/pexels-photo-6440018.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=300&w=300" },
@@ -16,6 +17,7 @@ export default function Music() {
 
   return (
     <div className="flex flex-col h-full text-white" data-testid="music-app">
+      <DemoBadge note="Tracks are placeholders. Real playback + uploads coming soon." />
       <div className="flex-1 grid grid-cols-3 overflow-hidden">
         <div className="col-span-2 p-6 overflow-y-auto">
           <div className="mono-label">// Library</div>

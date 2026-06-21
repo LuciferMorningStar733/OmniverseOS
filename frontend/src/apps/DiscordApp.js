@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import DemoBadge from "../components/DemoBadge";
 
 const SERVERS = [
   { id: "omni", name: "OmniVerse", channels: ["general", "ai-talk", "design"] },
@@ -37,7 +38,9 @@ export default function DiscordApp() {
   const channels = SERVERS.find((s) => s.id === server).channels;
 
   return (
-    <div className="flex h-full text-white" data-testid="discord-app">
+    <div className="flex flex-col h-full text-white" data-testid="discord-app">
+      <DemoBadge note="Messages stay local to this browser session." />
+      <div className="flex flex-1 overflow-hidden">
       <div className="w-16 bg-black/40 flex flex-col items-center py-3 gap-2 border-r border-white/10">
         {SERVERS.map((s) => (
           <button key={s.id} onClick={() => { setServer(s.id); setChannel(SERVERS.find(x => x.id === s.id).channels[0]); }} className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold transition ${server === s.id ? "bg-[#00F0FF] text-black rounded-xl" : "bg-white/5 text-slate-300 hover:bg-white/10 hover:rounded-xl"}`}>
@@ -70,6 +73,7 @@ export default function DiscordApp() {
           <input data-testid="discord-input" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={`Message #${channel}`} className="input-cyber flex-1" />
           <button onClick={send} className="neon-btn primary"><i className="fa-solid fa-paper-plane"></i></button>
         </div>
+      </div>
       </div>
     </div>
   );

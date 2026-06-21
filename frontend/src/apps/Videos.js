@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import DemoBadge from "../components/DemoBadge";
 
 const seed = [
   { id: "dQw4w9WgXcQ", title: "Cyberpunk Night Drive — 4K", views: "2.3M", channel: "NightOps" },
@@ -13,6 +14,7 @@ export default function Videos() {
   const [sel, setSel] = useState(seed[0]);
   return (
     <div className="grid grid-cols-3 h-full text-white" data-testid="videos-app">
+      <div className="col-span-3"><DemoBadge note="Curated YouTube samples. Personal subscriptions coming soon." /></div>
       <div className="col-span-2 p-5 flex flex-col">
         <div className="mono-label">// Stream</div>
         <h2 className="font-heading text-xl font-bold mb-3">{sel.title}</h2>
