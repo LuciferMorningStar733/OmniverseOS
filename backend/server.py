@@ -38,6 +38,26 @@ api = APIRouter(prefix="/api")
 security = HTTPBearer(auto_error=False)
 
 
+# ---------- Rate limiting (in-process token bucket) ----------
+import time
+import asyncio
+from collections import defaultdict
+
+_RATE_BUCKETS: dict[str, list[float]] = defaultdict(list)
+_RATE_LOCK = asyncio.Lock()
+
+
+async def rate_limit(key: str, max_per_min: int = 20):
+    now = time.monotonic()
+    cutoff = now - 60.0
+    async with _RATE_LOCK:
+        bucket = _RATE_BUCKETS[key]
+        bucket[:] = [t for t in bucket if t > cutoff]
+        if len(bucket) >= max_per_min:
+            raise HTTPException(429, "Rate limit exceeded. Try again shortly.")
+        bucket.append(now)
+
+
 # ---------- Helpers ----------
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -139,6 +159,15 @@ async def root():
     return {"status": "ok", "service": "OmniverseOS"}
 
 
+@api.get("/health")
+async def health():
+    try:
+        await db.command("ping")
+        return {"status": "healthy", "db": "ok", "time": now_iso()}
+    except Exception as e:
+        raise HTTPException(503, f"DB unhealthy: {e}")
+
+
 @api.post("/auth/signup")
 async def signup(req: SignupReq):
     existing = await db.users.find_one({"email": req.email})
@@ -201,6 +230,7 @@ async def ai_chat_stream(req: ChatReq, user=Depends(get_current_user)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "LLM key not configured")
     _validate_model(req.provider, req.model)
+    await rate_limit(f"chat:{user['id']}", max_per_min=30)
 
     # Save user message
     user_msg = {
@@ -296,6 +326,7 @@ async def chat_history(session_id: str, user=Depends(get_current_user)):
 async def ai_image(req: ImageGenReq, user=Depends(get_current_user)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "LLM key not configured")
+    await rate_limit(f"image:{user['id']}", max_per_min=8)
     try:
         gen = OpenAIImageGeneration(api_key=EMERGENT_LLM_KEY)
         images = await gen.generate_images(
@@ -324,8 +355,17 @@ async def image_history(user=Depends(get_current_user)):
 
 
 # ---------- Generic CRUD factory ----------
-async def list_for_user(coll_name: str, user_id: str):
-    docs = await db[coll_name].find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+async def list_for_user(coll_name: str, user_id: str, limit: int = 200, skip: int = 0):
+    limit = max(1, min(limit, 500))
+    skip = max(0, skip)
+    docs = (
+        await db[coll_name]
+        .find({"user_id": user_id}, {"_id": 0})
+        .sort("created_at", -1)
+        .skip(skip)
+        .limit(limit)
+        .to_list(limit)
+    )
     return docs
 
 

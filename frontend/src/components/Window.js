@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { useOS } from "../context/OSContext";
 import { getApp } from "../lib/apps";
+import ErrorBoundary from "./ErrorBoundary";
 
 export default function Window({ win, children }) {
   const { closeWindow, focusWindow, updateWindow, toggleMaximize, minimize, activeId } = useOS();
@@ -60,7 +61,15 @@ export default function Window({ win, children }) {
 
       {/* Content */}
       <div className="w-full h-[calc(100%-44px)] overflow-hidden">
-        {children}
+        <ErrorBoundary>
+          <React.Suspense fallback={
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="font-mono text-xs tracking-widest text-[#00F0FF] animate-pulse">// LOADING MODULE…</div>
+            </div>
+          }>
+            {children}
+          </React.Suspense>
+        </ErrorBoundary>
       </div>
     </motion.div>
   );
