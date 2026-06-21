@@ -27,7 +27,6 @@ export default function CodeEditor() {
     const origLog = console.log;
     console.log = (...args) => { logs.push({ type: "log", text: args.map(a => typeof a === "object" ? JSON.stringify(a) : String(a)).join(" ") }); origLog(...args); };
     try {
-      // eslint-disable-next-line no-new-func
       const fn = new Function(code);
       const result = fn();
       if (result !== undefined) logs.push({ type: "return", text: String(result) });

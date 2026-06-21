@@ -10,9 +10,15 @@ export default function AIChat() {
   const [streaming, setStreaming] = useState(false);
   const [model, setModel] = useState({ provider: "anthropic", model: "claude-sonnet-4-6" });
   const endRef = useRef();
+  const mountedRef = useRef(true);
+  const abortRef = useRef(null);
 
   useEffect(() => {
-    aiApi.history(SESSION_ID).then(setMessages).catch(() => {});
+    aiApi.history(SESSION_ID).then((m) => mountedRef.current && setMessages(m)).catch(() => {});
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -25,18 +31,21 @@ export default function AIChat() {
     setInput("");
     setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setStreaming(true);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       await aiApi.chatStream({ session_id: SESSION_ID, message: text, ...model }, (delta) => {
+        if (!mountedRef.current) return;
         setMessages((m) => {
           const copy = [...m];
           copy[copy.length - 1] = { role: "assistant", content: copy[copy.length - 1].content + delta };
           return copy;
         });
-      });
+      }, ctrl.signal);
     } catch (e) {
-      toast.error("Chat failed");
+      if (e?.name !== "AbortError") toast.error("Chat failed");
     } finally {
-      setStreaming(false);
+      if (mountedRef.current) setStreaming(false);
     }
   };
 

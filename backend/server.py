@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -8,8 +8,8 @@ import os
 import logging
 import base64
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Any
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
 import uuid
 import bcrypt
 import jwt as pyjwt
@@ -24,9 +24,11 @@ load_dotenv(ROOT_DIR / ".env")
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
-JWT_SECRET = os.environ.get("JWT_SECRET", "omniverseos-dev-secret-change-me")
+JWT_SECRET = os.environ.get("JWT_SECRET") or os.environ.get("EMERGENT_LLM_KEY") or "omniverseos-dev-do-not-use-in-prod"
 JWT_ALG = "HS256"
 JWT_EXP_HOURS = 24 * 7
+MAX_PROMPT_LEN = 4000
+MAX_MESSAGE_LEN = 8000
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -78,15 +80,15 @@ class LoginReq(BaseModel):
 
 
 class ChatReq(BaseModel):
-    session_id: str
-    message: str
+    session_id: str = Field(..., max_length=120)
+    message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LEN)
     provider: str = "anthropic"
     model: str = "claude-sonnet-4-6"
-    system: Optional[str] = None
+    system: Optional[str] = Field(default=None, max_length=4000)
 
 
 class ImageGenReq(BaseModel):
-    prompt: str
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LEN)
 
 
 class NoteReq(BaseModel):
@@ -152,7 +154,11 @@ async def signup(req: SignupReq):
         "created_at": now_iso(),
         "avatar": f"https://api.dicebear.com/7.x/bottts-neutral/svg?seed={req.email}",
     }
-    await db.users.insert_one(user)
+    try:
+        await db.users.insert_one(user)
+    except Exception:
+        # Unique-index race: another request inserted same email concurrently.
+        raise HTTPException(400, "Email already registered")
     token = make_token(user_id, req.email)
     user.pop("password")
     user.pop("_id", None)
@@ -178,10 +184,23 @@ async def me(user=Depends(get_current_user)):
 
 
 # ---------- Routes: AI Chat (Streaming SSE) ----------
+ALLOWED_MODELS = {
+    "anthropic": {"claude-sonnet-4-6", "claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001"},
+    "openai": {"gpt-5.4", "gpt-5.4-mini", "gpt-5.2"},
+    "gemini": {"gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.5-flash"},
+}
+
+
+def _validate_model(provider: str, model: str) -> None:
+    if provider not in ALLOWED_MODELS or model not in ALLOWED_MODELS[provider]:
+        raise HTTPException(400, "Unsupported provider/model")
+
+
 @api.post("/ai/chat/stream")
 async def ai_chat_stream(req: ChatReq, user=Depends(get_current_user)):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "LLM key not configured")
+    _validate_model(req.provider, req.model)
 
     # Save user message
     user_msg = {
@@ -239,6 +258,7 @@ async def ai_chat(req: ChatReq, user=Depends(get_current_user)):
     """Non-streaming fallback"""
     if not EMERGENT_LLM_KEY:
         raise HTTPException(500, "LLM key not configured")
+    _validate_model(req.provider, req.model)
     system_msg = req.system or "You are OmniverseOS Assistant. Be concise and helpful."
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
@@ -461,16 +481,40 @@ async def analytics_summary(user=Depends(get_current_user)):
 
 
 app.include_router(api)
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+# CORS: with wildcard origins, browsers reject credentials. Use regex when wildcard
+# requested, else explicit list with credentials.
+_cors_env = os.environ.get("CORS_ORIGINS", "*")
+if _cors_env.strip() == "*":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in _cors_env.split(",") if o.strip()],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def ensure_indexes():
+    # Unique email for users (prevents race on duplicate signup)
+    await db.users.create_index("email", unique=True)
+    # Per-user listing indexes
+    for coll in ("notes", "tasks", "events", "transactions", "memories", "files", "images"):
+        await db[coll].create_index([("user_id", 1), ("created_at", -1)])
+    # Chat history lookup
+    await db.chat_messages.create_index([("user_id", 1), ("session_id", 1), ("created_at", 1)])
 
 
 @app.on_event("shutdown")

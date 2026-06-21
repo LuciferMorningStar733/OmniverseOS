@@ -15,8 +15,7 @@ export default function Desktop() {
     if (windows.length === 0) {
       openApp("dashboard");
     }
-    // eslint-disable-next-line
-  }, []);
+  }, [openApp, windows.length]);
 
   useEffect(() => {
     const handler = (e) => {

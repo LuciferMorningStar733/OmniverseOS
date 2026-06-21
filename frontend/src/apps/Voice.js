@@ -7,38 +7,69 @@ export default function Voice() {
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
   const recogRef = useRef(null);
+  const transcriptRef = useRef(""); // avoid stale closure inside onend
+  const startedRef = useRef(false);
 
   const start = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return toast.error("Speech recognition not supported in this browser");
+    if (startedRef.current) return; // guard double-start race
+
     const r = new SR();
-    r.continuous = false; r.interimResults = true; r.lang = "en-US";
-    r.onresult = (e) => {
-      const t = Array.from(e.results).map(x => x[0].transcript).join("");
-      setTranscript(t);
-    };
-    r.onend = async () => {
-      setListening(false);
-      if (transcript || r.finalTranscript) {
-        try {
-          const text = transcript || "";
-          if (!text.trim()) return;
-          const { response: ans } = await aiApi.chat({ session_id: "voice", message: text, provider: "anthropic", model: "claude-sonnet-4-6" });
-          setResponse(ans);
-          const u = new SpeechSynthesisUtterance(ans);
-          u.rate = 1.05;
-          window.speechSynthesis.speak(u);
-        } catch { toast.error("Voice query failed"); }
-      }
-    };
-    recogRef.current = r;
+    r.continuous = false;
+    r.interimResults = true;
+    r.lang = "en-US";
+
+    transcriptRef.current = "";
     setTranscript("");
     setResponse("");
+
+    r.onresult = (e) => {
+      const t = Array.from(e.results).map((x) => x[0].transcript).join("");
+      transcriptRef.current = t;
+      setTranscript(t);
+    };
+
+    r.onerror = () => {
+      startedRef.current = false;
+      setListening(false);
+    };
+
+    r.onend = async () => {
+      startedRef.current = false;
+      setListening(false);
+      const text = transcriptRef.current.trim();
+      if (!text) return;
+      try {
+        const { response: ans } = await aiApi.chat({
+          session_id: "voice",
+          message: text,
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+        });
+        setResponse(ans);
+        const u = new SpeechSynthesisUtterance(ans);
+        u.rate = 1.05;
+        window.speechSynthesis.speak(u);
+      } catch {
+        toast.error("Voice query failed");
+      }
+    };
+
+    recogRef.current = r;
+    startedRef.current = true;
     setListening(true);
-    r.start();
+    try {
+      r.start();
+    } catch {
+      startedRef.current = false;
+      setListening(false);
+    }
   };
 
-  const stop = () => { recogRef.current?.stop(); setListening(false); };
+  const stop = () => {
+    try { recogRef.current?.stop(); } catch { /* ignore */ }
+  };
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-6 text-white" data-testid="voice-app">

@@ -22,29 +22,34 @@ export const aiApi = {
   history: (sid) => api.get(`/ai/chat/history/${sid}`).then((r) => r.data),
   image: (prompt) => api.post("/ai/image", { prompt }).then((r) => r.data),
   imageHistory: () => api.get("/ai/image/history").then((r) => r.data),
-  chatStream: async (data, onDelta) => {
+  chatStream: async (data, onDelta, signal) => {
     const token = localStorage.getItem("omniverse_token");
     const res = await fetch(`${API}/ai/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(data),
+      signal,
     });
     if (!res.body) return;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split("\n\n");
-      buf = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6);
-        if (data === "[DONE]") return;
-        onDelta(data);
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6);
+          if (payload === "[DONE]") return;
+          onDelta(payload);
+        }
       }
+    } finally {
+      try { reader.releaseLock(); } catch { /* ignore */ }
     }
   },
 };

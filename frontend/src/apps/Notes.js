@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { crud } from "../lib/api";
 
 const c = crud("notes");
@@ -8,8 +8,8 @@ export default function Notes() {
   const [notes, setNotes] = useState([]);
   const [sel, setSel] = useState(null);
 
-  const load = () => c.list().then((n) => { setNotes(n); if (!sel && n[0]) setSel(n[0]); });
-  useEffect(() => { load(); }, []);
+  const load = useCallback(() => c.list().then((n) => { setNotes(n); setSel((s) => s || n[0] || null); }), []);
+  useEffect(() => { load(); }, [load]);
 
   const add = async () => {
     const n = await c.create({ title: "Untitled", content: "", color: colors[notes.length % 4] });

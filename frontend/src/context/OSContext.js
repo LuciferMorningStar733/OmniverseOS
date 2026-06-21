@@ -56,17 +56,15 @@ export const OSProvider = ({ children }) => {
   }, []);
 
   const openApp = useCallback((appId) => {
+    let newZ = 0;
+    setZCounter((z) => { newZ = z + 1; return newZ; });
     setWindows((prev) => {
       const existing = prev.find((w) => w.app === appId);
       if (existing) {
-        const newZ = zCounter + 1;
-        setZCounter(newZ);
         setActiveId(existing.id);
         return prev.map((w) => w.id === existing.id ? { ...w, z: newZ, minimized: false } : w);
       }
       const id = `${appId}-${Date.now()}`;
-      const newZ = zCounter + 1;
-      setZCounter(newZ);
       setActiveId(id);
       const win = {
         id,
@@ -81,18 +79,18 @@ export const OSProvider = ({ children }) => {
       };
       return [...prev, win];
     });
-  }, [zCounter]);
+  }, []);
 
   const closeWindow = useCallback((id) => {
     setWindows((prev) => prev.filter((w) => w.id !== id));
   }, []);
 
   const focusWindow = useCallback((id) => {
-    const newZ = zCounter + 1;
-    setZCounter(newZ);
+    let newZ = 0;
+    setZCounter((z) => { newZ = z + 1; return newZ; });
     setActiveId(id);
     setWindows((prev) => prev.map((w) => w.id === id ? { ...w, z: newZ, minimized: false } : w));
-  }, [zCounter]);
+  }, []);
 
   const updateWindow = useCallback((id, patch) => {
     setWindows((prev) => prev.map((w) => w.id === id ? { ...w, ...patch } : w));
