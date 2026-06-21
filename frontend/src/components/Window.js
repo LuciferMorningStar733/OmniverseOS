@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useOS } from "../context/OSContext";
 import { getApp } from "../lib/apps";
@@ -9,28 +9,49 @@ export default function Window({ win, children }) {
   const app = getApp(win.app);
   const isActive = activeId === win.id;
 
-  if (win.minimized) return null;
+  const [viewport, setViewport] = useState({ w: window.innerWidth, h: window.innerHeight });
 
-  const baseStyle = win.maximized
-    ? { left: 8, top: 0, width: "calc(100vw - 16px)", height: "calc(100vh - 96px)" }
-    : { left: win.x, top: win.y, width: win.w, height: win.h };
+  useEffect(() => {
+    const handleResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  if (win.minimized) return null;
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0, scale: 0.95, x: win.x, y: win.y, width: win.w, height: win.h }}
+      animate={{
+        opacity: 1,
+        scale: 1,
+        x: win.maximized ? 8 : win.x,
+        y: win.maximized ? 0 : win.y,
+        width: win.maximized ? viewport.w - 16 : win.w,
+        height: win.maximized ? viewport.h - 96 : win.h
+      }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
       drag={!win.maximized}
       dragHandle=".window-handle"
       dragMomentum={false}
-      onDragEnd={(_, info) => updateWindow(win.id, { x: win.x + info.offset.x, y: win.y + info.offset.y })}
+      dragConstraints={{
+        top: 0,
+        left: -win.w + 100,
+        right: viewport.w - 100,
+        bottom: viewport.h - 100
+      }}
+      onDragEnd={(_, info) => {
+        updateWindow(win.id, {
+          x: win.x + info.offset.x,
+          y: win.y + info.offset.y
+        });
+      }}
       onMouseDown={() => !isActive && focusWindow(win.id)}
-      className={`absolute glass rounded-2xl overflow-hidden window-shadow ${isActive ? "ring-1 ring-[#00F0FF]/30" : ""}`}
-      style={{ ...baseStyle, zIndex: win.z }}
+      className={`absolute glass rounded-2xl overflow-hidden window-shadow ${isActive ? "ring-1 ring-[#00F0FF]/30" : "ring-1 ring-white/10"}`}
+      style={{ zIndex: win.z, top: 0, left: 0 }}
       data-testid={`window-${win.app}`}
     >
-      {/* Header */}
       <div className="window-handle h-11 flex items-center justify-between px-3 border-b border-white/10 bg-white/[0.03] cursor-grab active:cursor-grabbing">
         <div className="flex items-center gap-2">
           <button
@@ -59,7 +80,6 @@ export default function Window({ win, children }) {
         <div className="w-16" />
       </div>
 
-      {/* Content */}
       <div className="w-full h-[calc(100%-44px)] overflow-hidden">
         <ErrorBoundary>
           <React.Suspense fallback={
