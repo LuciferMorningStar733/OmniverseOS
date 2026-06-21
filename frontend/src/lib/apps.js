@@ -14,6 +14,7 @@ export const APPS = [
   { id: "videos", name: "Videos", icon: "fa-video", color: "#FF003C", Component: lazy(() => import("../apps/Videos")), group: "media" },
   { id: "watchlist", name: "Watchlist", icon: "fa-film", color: "#FCEE09", Component: lazy(() => import("../apps/Watchlist")), group: "media" },
   { id: "files", name: "Files", icon: "fa-folder", color: "#00F0FF", Component: lazy(() => import("../apps/FileManager")), group: "system" },
+  { id: "clipboard", name: "Clipboard", icon: "fa-clipboard", color: "#39FF14", Component: lazy(() => import("../apps/Clipboard")), group: "system" },
   { id: "code", name: "Code", icon: "fa-code", color: "#39FF14", Component: lazy(() => import("../apps/CodeEditor")), group: "system" },
   { id: "finance", name: "Finance", icon: "fa-chart-line", color: "#39FF14", Component: lazy(() => import("../apps/Finance")), group: "data" },
   { id: "analytics", name: "Analytics", icon: "fa-chart-pie", color: "#FF003C", Component: lazy(() => import("../apps/Analytics")), group: "data" },

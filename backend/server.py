@@ -40,7 +40,7 @@ from contextlib import asynccontextmanager
 async def lifespan(_app: FastAPI):
     # startup
     await db.users.create_index("email", unique=True)
-    for coll in ("notes", "tasks", "events", "transactions", "memories", "files", "images"):
+    for coll in ("notes", "tasks", "events", "transactions", "memories", "files", "images", "clipboard"):
         await db[coll].create_index([("user_id", 1), ("created_at", -1)])
     await db.chat_messages.create_index([("user_id", 1), ("session_id", 1), ("created_at", 1)])
     yield
@@ -166,6 +166,11 @@ class FileReq(BaseModel):
     parent: str = "root"
     content: str = ""
     size: int = 0
+
+
+class ClipboardReq(BaseModel):
+    content: str = Field(..., min_length=1, max_length=20000)
+    label: str = Field(default="", max_length=120)
 
 
 # ---------- Routes: Auth ----------
@@ -505,6 +510,28 @@ async def create_file(req: FileReq, user=Depends(get_current_user)):
 @api.delete("/files/{fid}")
 async def delete_file(fid: str, user=Depends(get_current_user)):
     return await delete_for_user("files", user["id"], fid)
+
+
+# Clipboard (universal copy/paste across devices)
+@api.get("/clipboard")
+async def list_clipboard(user=Depends(get_current_user)):
+    # Cap at 50 most recent items, no pagination needed
+    return await list_for_user("clipboard", user["id"], limit=50)
+
+@api.post("/clipboard")
+async def create_clipboard(req: ClipboardReq, user=Depends(get_current_user)):
+    return await create_for_user("clipboard", user["id"], req.model_dump())
+
+@api.delete("/clipboard/{cid}")
+async def delete_clipboard(cid: str, user=Depends(get_current_user)):
+    return await delete_for_user("clipboard", user["id"], cid)
+
+@api.delete("/clipboard")
+async def clear_clipboard(user=Depends(get_current_user)):
+    res = await db.clipboard.delete_many({"user_id": user["id"]})
+    return {"deleted": res.deleted_count}
+
+
 
 
 # Analytics summary
