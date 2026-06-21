@@ -61,6 +61,34 @@ let webpackConfig = {
 };
 
 webpackConfig.devServer = (devServerConfig) => {
+  // Strip incompatible options for webpack-dev-server v5
+  delete devServerConfig.onAfterSetupMiddleware;
+  delete devServerConfig.onBeforeSetupMiddleware;
+  if (devServerConfig.https) {
+    devServerConfig.server = { type: "https", options: devServerConfig.https === true ? {} : devServerConfig.https };
+    delete devServerConfig.https;
+  }
+  delete devServerConfig.transportMode;
+  delete devServerConfig.injectClient;
+  delete devServerConfig.injectHot;
+  delete devServerConfig.publicPath;
+  delete devServerConfig.contentBase;
+  delete devServerConfig.contentBasePublicPath;
+  delete devServerConfig.disableHostCheck;
+  delete devServerConfig.overlay;
+  delete devServerConfig.sockHost;
+  delete devServerConfig.sockPath;
+  delete devServerConfig.sockPort;
+  delete devServerConfig.stats;
+  delete devServerConfig.before;
+  delete devServerConfig.after;
+  delete devServerConfig.serveIndex;
+  delete devServerConfig.staticOptions;
+  delete devServerConfig.watchContentBase;
+  delete devServerConfig.watchOptions;
+  delete devServerConfig.writeToDisk;
+  devServerConfig.allowedHosts = "all";
+
   // Add health check endpoints if enabled
   if (config.enableHealthCheck && setupHealthEndpoints && healthPluginInstance) {
     const originalSetupMiddlewares = devServerConfig.setupMiddlewares;

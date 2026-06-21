@@ -1,89 +1,478 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import base64
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from pydantic import BaseModel, Field, EmailStr
+from typing import List, Optional, Any
 import uuid
-from datetime import datetime, timezone
+import bcrypt
+import jwt as pyjwt
+from datetime import datetime, timezone, timedelta
 
+from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
+from emergentintegrations.llm.openai.image_generation import OpenAIImageGeneration
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+MONGO_URL = os.environ["MONGO_URL"]
+DB_NAME = os.environ["DB_NAME"]
+EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+JWT_SECRET = os.environ.get("JWT_SECRET", "omniverseos-dev-secret-change-me")
+JWT_ALG = "HS256"
+JWT_EXP_HOURS = 24 * 7
 
-# Create the main app without a prefix
-app = FastAPI()
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+app = FastAPI(title="OmniverseOS API")
+api = APIRouter(prefix="/api")
+security = HTTPBearer(auto_error=False)
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# ---------- Helpers ----------
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
+def make_token(user_id: str, email: str) -> str:
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXP_HOURS),
+    }
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+
+async def get_current_user(
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> dict:
+    if not creds:
+        raise HTTPException(status_code=401, detail="Missing token")
+    try:
+        payload = pyjwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+# ---------- Models ----------
+class SignupReq(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+
+class LoginReq(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class ChatReq(BaseModel):
+    session_id: str
+    message: str
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-4-6"
+    system: Optional[str] = None
+
+
+class ImageGenReq(BaseModel):
+    prompt: str
+
+
+class NoteReq(BaseModel):
+    title: str = "Untitled"
+    content: str = ""
+    color: str = "#00F0FF"
+
+
+class TaskReq(BaseModel):
+    title: str
+    description: str = ""
+    status: str = "todo"  # todo, doing, done
+    priority: str = "medium"
+
+
+class EventReq(BaseModel):
+    title: str
+    date: str  # ISO date
+    time: str = "09:00"
+    color: str = "#00F0FF"
+    description: str = ""
+
+
+class TxnReq(BaseModel):
+    title: str
+    amount: float
+    category: str = "general"
+    type: str = "expense"  # income / expense
+    date: str
+
+
+class MemoryReq(BaseModel):
+    content: str
+    tag: str = "general"
+
+
+class FileReq(BaseModel):
+    name: str
+    type: str = "file"  # file | folder
+    parent: str = "root"
+    content: str = ""
+    size: int = 0
+
+
+# ---------- Routes: Auth ----------
+@api.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"status": "ok", "service": "OmniverseOS"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api.post("/auth/signup")
+async def signup(req: SignupReq):
+    existing = await db.users.find_one({"email": req.email})
+    if existing:
+        raise HTTPException(400, "Email already registered")
+    user_id = str(uuid.uuid4())
+    hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
+    user = {
+        "id": user_id,
+        "email": req.email,
+        "name": req.name,
+        "password": hashed,
+        "created_at": now_iso(),
+        "avatar": f"https://api.dicebear.com/7.x/bottts-neutral/svg?seed={req.email}",
+    }
+    await db.users.insert_one(user)
+    token = make_token(user_id, req.email)
+    user.pop("password")
+    user.pop("_id", None)
+    return {"token": token, "user": user}
 
-# Include the router in the main app
-app.include_router(api_router)
 
+@api.post("/auth/login")
+async def login(req: LoginReq):
+    user = await db.users.find_one({"email": req.email})
+    if not user:
+        raise HTTPException(401, "Invalid credentials")
+    if not bcrypt.checkpw(req.password.encode(), user["password"].encode()):
+        raise HTTPException(401, "Invalid credentials")
+    token = make_token(user["id"], user["email"])
+    user.pop("password")
+    user.pop("_id", None)
+    return {"token": token, "user": user}
+
+
+@api.get("/auth/me")
+async def me(user=Depends(get_current_user)):
+    return user
+
+
+# ---------- Routes: AI Chat (Streaming SSE) ----------
+@api.post("/ai/chat/stream")
+async def ai_chat_stream(req: ChatReq, user=Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "LLM key not configured")
+
+    # Save user message
+    user_msg = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "session_id": req.session_id,
+        "role": "user",
+        "content": req.message,
+        "created_at": now_iso(),
+    }
+    await db.chat_messages.insert_one(user_msg)
+
+    system_msg = req.system or (
+        "You are OmniverseOS Assistant — a friendly, witty cyberpunk AI living "
+        "inside an operating system. Be concise, helpful, and creative."
+    )
+
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"{user['id']}-{req.session_id}",
+        system_message=system_msg,
+    ).with_model(req.provider, req.model)
+
+    async def event_gen():
+        full = []
+        try:
+            async for ev in chat.stream_message(UserMessage(text=req.message)):
+                if isinstance(ev, TextDelta):
+                    full.append(ev.content)
+                    yield f"data: {ev.content}\n\n"
+                elif isinstance(ev, StreamDone):
+                    break
+        except Exception as e:
+            yield f"data: [error: {str(e)}]\n\n"
+        # Save assistant message
+        await db.chat_messages.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "session_id": req.session_id,
+            "role": "assistant",
+            "content": "".join(full),
+            "created_at": now_iso(),
+        })
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@api.post("/ai/chat")
+async def ai_chat(req: ChatReq, user=Depends(get_current_user)):
+    """Non-streaming fallback"""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "LLM key not configured")
+    system_msg = req.system or "You are OmniverseOS Assistant. Be concise and helpful."
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"{user['id']}-{req.session_id}",
+        system_message=system_msg,
+    ).with_model(req.provider, req.model)
+
+    full = []
+    async for ev in chat.stream_message(UserMessage(text=req.message)):
+        if isinstance(ev, TextDelta):
+            full.append(ev.content)
+        elif isinstance(ev, StreamDone):
+            break
+    text = "".join(full)
+
+    await db.chat_messages.insert_many([
+        {"id": str(uuid.uuid4()), "user_id": user["id"], "session_id": req.session_id,
+         "role": "user", "content": req.message, "created_at": now_iso()},
+        {"id": str(uuid.uuid4()), "user_id": user["id"], "session_id": req.session_id,
+         "role": "assistant", "content": text, "created_at": now_iso()},
+    ])
+    return {"response": text}
+
+
+@api.get("/ai/chat/history/{session_id}")
+async def chat_history(session_id: str, user=Depends(get_current_user)):
+    msgs = await db.chat_messages.find(
+        {"user_id": user["id"], "session_id": session_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    return msgs
+
+
+# ---------- Routes: AI Image Generation ----------
+@api.post("/ai/image")
+async def ai_image(req: ImageGenReq, user=Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "LLM key not configured")
+    try:
+        gen = OpenAIImageGeneration(api_key=EMERGENT_LLM_KEY)
+        images = await gen.generate_images(
+            prompt=req.prompt, model="gpt-image-1", number_of_images=1
+        )
+        b64 = base64.b64encode(images[0]).decode()
+        record = {
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "prompt": req.prompt,
+            "image_b64": b64,
+            "created_at": now_iso(),
+        }
+        await db.images.insert_one(record)
+        return {"id": record["id"], "prompt": req.prompt, "image_b64": b64}
+    except Exception as e:
+        raise HTTPException(500, f"Image gen failed: {e}")
+
+
+@api.get("/ai/image/history")
+async def image_history(user=Depends(get_current_user)):
+    items = await db.images.find({"user_id": user["id"]}, {"_id": 0}).sort(
+        "created_at", -1
+    ).to_list(50)
+    return items
+
+
+# ---------- Generic CRUD factory ----------
+async def list_for_user(coll_name: str, user_id: str):
+    docs = await db[coll_name].find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return docs
+
+
+async def create_for_user(coll_name: str, user_id: str, data: dict):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        **data,
+    }
+    await db[coll_name].insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+async def update_for_user(coll_name: str, user_id: str, item_id: str, data: dict):
+    data["updated_at"] = now_iso()
+    res = await db[coll_name].update_one(
+        {"id": item_id, "user_id": user_id}, {"$set": data}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Not found")
+    doc = await db[coll_name].find_one({"id": item_id}, {"_id": 0})
+    return doc
+
+
+async def delete_for_user(coll_name: str, user_id: str, item_id: str):
+    res = await db[coll_name].delete_one({"id": item_id, "user_id": user_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+
+# Notes
+@api.get("/notes")
+async def list_notes(user=Depends(get_current_user)):
+    return await list_for_user("notes", user["id"])
+
+@api.post("/notes")
+async def create_note(req: NoteReq, user=Depends(get_current_user)):
+    return await create_for_user("notes", user["id"], req.model_dump())
+
+@api.put("/notes/{nid}")
+async def update_note(nid: str, req: NoteReq, user=Depends(get_current_user)):
+    return await update_for_user("notes", user["id"], nid, req.model_dump())
+
+@api.delete("/notes/{nid}")
+async def delete_note(nid: str, user=Depends(get_current_user)):
+    return await delete_for_user("notes", user["id"], nid)
+
+
+# Tasks
+@api.get("/tasks")
+async def list_tasks(user=Depends(get_current_user)):
+    return await list_for_user("tasks", user["id"])
+
+@api.post("/tasks")
+async def create_task(req: TaskReq, user=Depends(get_current_user)):
+    return await create_for_user("tasks", user["id"], req.model_dump())
+
+@api.put("/tasks/{tid}")
+async def update_task(tid: str, req: TaskReq, user=Depends(get_current_user)):
+    return await update_for_user("tasks", user["id"], tid, req.model_dump())
+
+@api.delete("/tasks/{tid}")
+async def delete_task(tid: str, user=Depends(get_current_user)):
+    return await delete_for_user("tasks", user["id"], tid)
+
+
+# Events
+@api.get("/events")
+async def list_events(user=Depends(get_current_user)):
+    return await list_for_user("events", user["id"])
+
+@api.post("/events")
+async def create_event(req: EventReq, user=Depends(get_current_user)):
+    return await create_for_user("events", user["id"], req.model_dump())
+
+@api.delete("/events/{eid}")
+async def delete_event(eid: str, user=Depends(get_current_user)):
+    return await delete_for_user("events", user["id"], eid)
+
+
+# Transactions
+@api.get("/transactions")
+async def list_txns(user=Depends(get_current_user)):
+    return await list_for_user("transactions", user["id"])
+
+@api.post("/transactions")
+async def create_txn(req: TxnReq, user=Depends(get_current_user)):
+    return await create_for_user("transactions", user["id"], req.model_dump())
+
+@api.delete("/transactions/{tid}")
+async def delete_txn(tid: str, user=Depends(get_current_user)):
+    return await delete_for_user("transactions", user["id"], tid)
+
+
+# Memory
+@api.get("/memories")
+async def list_memories(user=Depends(get_current_user)):
+    return await list_for_user("memories", user["id"])
+
+@api.post("/memories")
+async def create_memory(req: MemoryReq, user=Depends(get_current_user)):
+    return await create_for_user("memories", user["id"], req.model_dump())
+
+@api.delete("/memories/{mid}")
+async def delete_memory(mid: str, user=Depends(get_current_user)):
+    return await delete_for_user("memories", user["id"], mid)
+
+
+# Files (virtual file manager)
+@api.get("/files")
+async def list_files(user=Depends(get_current_user)):
+    return await list_for_user("files", user["id"])
+
+@api.post("/files")
+async def create_file(req: FileReq, user=Depends(get_current_user)):
+    return await create_for_user("files", user["id"], req.model_dump())
+
+@api.delete("/files/{fid}")
+async def delete_file(fid: str, user=Depends(get_current_user)):
+    return await delete_for_user("files", user["id"], fid)
+
+
+# Analytics summary
+@api.get("/analytics/summary")
+async def analytics_summary(user=Depends(get_current_user)):
+    uid = user["id"]
+    notes = await db.notes.count_documents({"user_id": uid})
+    tasks = await db.tasks.count_documents({"user_id": uid})
+    done = await db.tasks.count_documents({"user_id": uid, "status": "done"})
+    events = await db.events.count_documents({"user_id": uid})
+    memories = await db.memories.count_documents({"user_id": uid})
+    images = await db.images.count_documents({"user_id": uid})
+    messages = await db.chat_messages.count_documents({"user_id": uid})
+    txns = await db.transactions.find({"user_id": uid}, {"_id": 0}).to_list(1000)
+    income = sum(t["amount"] for t in txns if t.get("type") == "income")
+    expense = sum(t["amount"] for t in txns if t.get("type") == "expense")
+    return {
+        "notes": notes,
+        "tasks": tasks,
+        "tasks_done": done,
+        "events": events,
+        "memories": memories,
+        "images": images,
+        "messages": messages,
+        "income": income,
+        "expense": expense,
+        "net": income - expense,
+    }
+
+
+app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @app.on_event("shutdown")
-async def shutdown_db_client():
+async def shutdown_db():
     client.close()
