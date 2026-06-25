@@ -1,4 +1,5 @@
 import React from "react";
+import { motion } from "framer-motion";
 import { useOS } from "../context/OSContext";
 import { WALLPAPERS } from "../lib/wallpapers";
 
@@ -19,28 +20,66 @@ export default function Settings() {
       </div>
 
       <div className="glass-light rounded-xl p-5 mb-3">
-        <div className="mono-label mb-2">// Wallpaper</div>
-        <h3 className="font-heading text-base font-bold mb-3">Desktop background</h3>
-        <div className="grid grid-cols-3 gap-3" data-testid="wallpaper-grid">
+        <div className="flex items-baseline justify-between mb-3">
+          <div>
+            <div className="mono-label">// Wallpaper</div>
+            <h3 className="font-heading text-base font-bold">Desktop background</h3>
+          </div>
+          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">{WALLPAPERS.length} scenes</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3" data-testid="wallpaper-grid">
           {WALLPAPERS.map((w) => {
             const active = wallpaper === w.id;
             return (
-              <button
+              <motion.button
                 key={w.id}
                 data-testid={`wallpaper-${w.id}`}
                 onClick={() => setWallpaper(w.id)}
-                className={`group relative aspect-video rounded-lg overflow-hidden border transition ${active ? "border-[#00F0FF] ring-2 ring-[#00F0FF]/40" : "border-white/10 hover:border-white/30"}`}
+                whileHover={{ y: -3, scale: 1.015 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 320, damping: 20 }}
+                className={`relative rounded-xl overflow-hidden text-left border transition-colors ${
+                  active
+                    ? "border-[#00F0FF] shadow-[0_0_0_3px_rgba(0,240,255,0.18),0_18px_40px_rgba(0,0,0,0.5)]"
+                    : "border-white/10 hover:border-white/30"
+                }`}
+                style={{ aspectRatio: "16 / 10" }}
               >
-                <div className={`absolute inset-0 ${w.className}`} />
-                <div className="absolute inset-x-0 bottom-0 px-2 py-1 bg-gradient-to-t from-black/85 to-transparent text-left">
-                  <div className="text-[11px] font-medium truncate">{w.name}</div>
-                </div>
-                {active && (
-                  <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-[#00F0FF] text-black flex items-center justify-center text-[10px]">
-                    <i className="fa-solid fa-check"></i>
+                {/* Live miniature of the wallpaper */}
+                <div className={`absolute inset-0 ${w.className}`}>
+                  <div
+                    className="wp-typo"
+                    style={{
+                      fontSize: "clamp(18px, 3vw, 32px)",
+                      WebkitTextStroke: "0.7px rgba(0,240,255,0.5)",
+                      textShadow: "0 0 10px rgba(0,240,255,0.25)",
+                    }}
+                  >
+                    {w.typo.main}
+                    {w.typo.line2 && (
+                      <span style={{ WebkitTextStroke: "0.7px rgba(255,0,60,0.65)" }}>{w.typo.line2}</span>
+                    )}
                   </div>
+                </div>
+
+                {/* Bottom label */}
+                <div className="absolute inset-x-0 bottom-0 px-3 py-2 bg-gradient-to-t from-black/90 via-black/55 to-transparent">
+                  <div className="text-xs font-semibold text-white">{w.name}</div>
+                  <div className="text-[9px] font-mono uppercase tracking-widest text-slate-400">{w.id}</div>
+                </div>
+
+                {active && (
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 18 }}
+                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#00F0FF] text-black flex items-center justify-center text-[11px] shadow-[0_0_14px_rgba(0,240,255,0.7)]"
+                  >
+                    <i className="fa-solid fa-check"></i>
+                  </motion.div>
                 )}
-              </button>
+              </motion.button>
             );
           })}
         </div>
@@ -52,7 +91,7 @@ export default function Settings() {
           ["Theme", "Cyberpunk Dark"],
           ["AI Model", "Claude Sonnet 4.6"],
           ["Storage", "MongoDB"],
-          ["Build", "OmniverseOS v1.1.0"],
+          ["Build", "OmniverseOS v1.2.0"],
         ].map(([k, v]) => (
           <div key={k} className="flex justify-between text-sm py-1">
             <span className="text-slate-400">{k}</span>

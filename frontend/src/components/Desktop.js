@@ -10,14 +10,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { getWallpaper } from "../lib/wallpapers";
 
 export default function Desktop() {
-  const { windows, openApp, setPaletteOpen, user, wallpaper } = useOS();
+  const { windows, setPaletteOpen, wallpaper } = useOS();
   const wp = getWallpaper(wallpaper);
-
-  useEffect(() => {
-    if (windows.length === 0) {
-      openApp("dashboard");
-    }
-  }, [openApp, windows.length]);
+  // Note: we intentionally do NOT auto-open Dashboard. The desktop is the home.
 
   useEffect(() => {
     const handler = (e) => {
@@ -32,22 +27,44 @@ export default function Desktop() {
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#05050A]" data-testid="desktop-root">
+      {/* Wallpaper cross-fade */}
       <AnimatePresence mode="wait">
         <motion.div
           key={wp.id}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: "easeInOut" }}
+          transition={{ duration: 0.7, ease: "easeInOut" }}
           className={`wp-base ${wp.className}`}
-        />
+        >
+          {/* Integrated branding — each wallpaper styles its own .wp-typo */}
+          {wp.typo?.main && (
+            <div className="wp-typo">
+              {wp.typo.main}
+              {wp.typo.line2 && <span>{wp.typo.line2}</span>}
+            </div>
+          )}
+          {wp.typo?.sub && <div className="wp-typo-sub">{wp.typo.sub}</div>}
+          {/* Decorative ambient layers per-wallpaper */}
+          {wp.id === "quantum-horizon" && <div className="wp-fog" />}
+          {(wp.id === "neural-core" || wp.id === "ai-nexus") && <div className="wp-beams" />}
+        </motion.div>
       </AnimatePresence>
+
+      {/* Shared ambient particles + subtle scanline across all wallpapers */}
       <div className="wp-particles" />
-      <div className="wp-brand"><span>OMNI</span>VERSE<span>OS</span></div>
-      <div className="absolute inset-0 scanline opacity-30 pointer-events-none" />
+      <div className="absolute inset-0 scanline opacity-20 pointer-events-none" />
 
-      <TopBar />
+      {/* Top bar fades in slightly later */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35, duration: 0.45, ease: "easeOut" }}
+      >
+        <TopBar />
+      </motion.div>
 
+      {/* Window layer */}
       <div className="absolute inset-0 z-10 pointer-events-none" style={{ paddingTop: 56, paddingBottom: 96 }}>
         <AnimatePresence>
           {windows.map((w) => {
