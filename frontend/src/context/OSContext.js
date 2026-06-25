@@ -140,6 +140,7 @@ export const OSProvider = ({ children }) => {
       windows, activeId, openApp, closeWindow, focusWindow, updateWindow, toggleMaximize, minimize,
       paletteOpen, setPaletteOpen,
       notifOpen, setNotifOpen, notifications, pushNotification, clearNotifications,
+      wallpaper, setWallpaper,
     }}>
       {children}
     </OSContext.Provider>
