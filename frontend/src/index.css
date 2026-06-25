@@ -165,12 +165,152 @@ html, body, #root {
   color: #fff;
   font-family: 'Outfit', sans-serif;
   outline: none;
-  transition: all 0.2s ease;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
   width: 100%;
 }
 .input-cyber:focus {
   border-color: var(--neon-cyan);
   box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.15);
+}
+.input-cyber:hover:not(:focus) {
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* ============================================================
+   GOLD MASTER POLISH — Cascading rules.
+   Replaces every native browser control to match OmniverseOS.
+   ============================================================ */
+
+/* Global accent so native checkbox/radio/range/progress use cyan */
+html { accent-color: var(--neon-cyan); color-scheme: dark; }
+
+/* Replace native select with our design language */
+select.input-cyber,
+.input-cyber select,
+select:not([multiple]) {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: rgba(255, 255, 255, 0.03);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%2300F0FF' d='M6 8L0 0h12z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+select:focus-visible { outline: none; }
+/* dropdown options panel (browser-rendered) — best-effort styling */
+select option {
+  background: #07090F;
+  color: #E2E8F0;
+}
+
+/* Date / time / color / file inputs — make the wrapper match */
+input[type="date"], input[type="time"], input[type="datetime-local"],
+input[type="month"], input[type="week"], input[type="number"] {
+  color-scheme: dark;
+}
+/* Webkit calendar / time spinners — tint to cyan */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(67%) sepia(98%) saturate(2000%) hue-rotate(150deg) brightness(105%);
+  opacity: 0.65;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+/* Color picker swatch */
+input[type="color"] {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 2px;
+  cursor: pointer;
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+/* Range slider — full cyan reskin */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--neon-cyan);
+  box-shadow: 0 0 8px rgba(0,240,255,0.6);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-track {
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border: none; border-radius: 50%;
+  background: var(--neon-cyan);
+  box-shadow: 0 0 8px rgba(0,240,255,0.6);
+  cursor: pointer;
+}
+
+/* Custom number input spinner removal for cleaner look */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* Textareas should match inputs and resize cleanly */
+textarea.input-cyber { resize: vertical; min-height: 60px; line-height: 1.5; }
+
+/* Keyboard-only focus ring for ANY focusable element (a11y) */
+*:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* But not when our own components opt out (button .neon-btn already has hover ring) */
+.neon-btn:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 3px; }
+
+/* Default tap highlight on mobile — remove the blue flash */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Native autofill — keep dark background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #fff;
+  -webkit-box-shadow: 0 0 0 1000px rgba(8,10,16,0.85) inset;
+  caret-color: var(--neon-cyan);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Unified disabled state */
+button:disabled, .neon-btn:disabled,
+input:disabled, select:disabled, textarea:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Selection */
+::selection { background: rgba(0,240,255,0.3); color: #fff; }
+
+/* Smoother default transition tokens used in inline styles via Tailwind .transition */
+.transition, .transition-all, .transition-colors, .transition-opacity, .transition-transform {
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  transition-duration: 200ms;
 }
 
 /* Window animations */

@@ -1,5 +1,6 @@
+/* eslint-env jest */
 /**
- * Smoke test: app registry must expose all 18 expected modules with
+ * Smoke test: app registry must expose all expected modules with
  * required metadata. Pure data — no DOM / axios / router needed.
  */
 import { APPS, getApp } from "../lib/apps";
