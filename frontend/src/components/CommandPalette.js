@@ -47,7 +47,7 @@ export default function CommandPalette() {
                 if (e.key === "Enter" && results[0]) launch(results[0].id);
                 if (e.key === "Escape") setPaletteOpen(false);
               }}
-              placeholder="Search apps, commands…"
+              placeholder="Search apps, files or ask AI…"
               className="flex-1 bg-transparent outline-none text-base text-white placeholder:text-slate-500"
             />
             <kbd className="px-2 py-0.5 text-[10px] bg-white/10 rounded font-mono">ESC</kbd>

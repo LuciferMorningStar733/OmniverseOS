@@ -48,7 +48,7 @@ export default function Desktop() {
 
       <TopBar />
 
-      <div className="absolute inset-0 z-10 pointer-events-none">
+      <div className="absolute inset-0 z-10 pointer-events-none" style={{ paddingTop: 56, paddingBottom: 96 }}>
         <AnimatePresence>
           {windows.map((w) => {
             const app = getApp(w.app);
