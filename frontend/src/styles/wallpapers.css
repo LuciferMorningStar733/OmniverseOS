@@ -174,14 +174,21 @@
   letter-spacing: -0.04em;
   line-height: 0.85;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(0,240,255,0.08);
-  text-stroke: 1px rgba(0,240,255,0.08);
+  -webkit-text-stroke: 1.5px rgba(0,240,255,0.22);
+  text-stroke: 1.5px rgba(0,240,255,0.22);
   pointer-events: none;
   user-select: none;
   text-align: right;
   mix-blend-mode: screen;
+  text-shadow: 0 0 24px rgba(0,240,255,0.15);
 }
-.wp-brand span { display: block; color: transparent; -webkit-text-stroke: 1px rgba(255,0,60,0.06); }
+.wp-brand span {
+  display: block;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(255,0,60,0.32);
+  text-stroke: 1.5px rgba(255,0,60,0.32);
+  text-shadow: 0 0 22px rgba(255,0,60,0.18);
+}
 
 @keyframes wpDrift {
   0%   { transform: translate3d(0, 0, 0) scale(1); }
