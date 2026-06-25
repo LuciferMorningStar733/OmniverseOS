@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { authApi } from "../lib/api";
+import { DEFAULT_WALLPAPER } from "../lib/wallpapers";
 
 const OSContext = createContext(null);
 
 const LS_WINDOWS = "omniverse_windows";
 const LS_NOTIFS = "omniverse_notifs";
+const LS_WALLPAPER = "omniverse_wallpaper";
 
 export const OSProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -19,6 +21,12 @@ export const OSProvider = ({ children }) => {
   const [notifications, setNotifications] = useState(() => {
     try { return JSON.parse(localStorage.getItem(LS_NOTIFS) || "[]"); } catch { return []; }
   });
+  const [wallpaper, setWallpaperState] = useState(() => localStorage.getItem(LS_WALLPAPER) || DEFAULT_WALLPAPER);
+
+  const setWallpaper = useCallback((id) => {
+    setWallpaperState(id);
+    localStorage.setItem(LS_WALLPAPER, id);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(LS_WINDOWS, JSON.stringify(windows.map(w => ({ id: w.id, app: w.app, x: w.x, y: w.y, w: w.w, h: w.h }))));

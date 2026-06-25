@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "./styles/wallpapers.css";
+
 :root {
   --bg-void: #05050A;
   --neon-cyan: #00F0FF;
