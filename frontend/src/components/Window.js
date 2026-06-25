@@ -21,7 +21,7 @@ export default function Window({ win, children }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95, x: win.x, y: win.y, width: win.w, height: win.h }}
+      initial={{ opacity: 0, scale: 0.96, x: win.x, y: win.y, width: win.w, height: win.h }}
       animate={{
         opacity: 1,
         scale: 1,
@@ -30,8 +30,8 @@ export default function Window({ win, children }) {
         width: win.maximized ? viewport.w - 16 : win.w,
         height: win.maximized ? viewport.h - 96 : win.h
       }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.18, ease: "easeOut" }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ type: "spring", damping: 26, stiffness: 320, mass: 0.6, opacity: { duration: 0.18 } }}
       drag={!win.maximized}
       dragHandle=".window-handle"
       dragMomentum={false}
