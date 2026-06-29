@@ -123,7 +123,7 @@ function AmbientParticles() {
 }
 export default function Desktop() {
   const {
-    windows, setPaletteOpen, wallpaper, focusWindow, activeId,
+    windows, setPaletteOpen, paletteOpen, wallpaper, focusWindow, activeId,
     openApp, closeWindow, minimize, updateWindow, toggleMaximize,
     notifOpen, setNotifOpen, pushNotification, clearNotifications, trackUrl,
   } = useOS();
@@ -157,12 +157,59 @@ export default function Desktop() {
     };
   }, [isMobile, resetIdle]);
   useEffect(() => {
+    // Single global keyboard handler — extend here, never add a parallel listener.
+    const isTypingTarget = (el) => {
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (el.isContentEditable) return true;
+      return false;
+    };
     const handler = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      // ── Esc closes overlays (works even while typing) ─────────────────────
+      if (e.key === "Escape") {
+        if (paletteOpen) { setPaletteOpen(false); return; }
+        if (missionOpen) { setMissionOpen(false); return; }
+        if (showWelcome && windows.filter((w) => !w.minimized).length === 0) { setShowWelcome(false); return; }
+        return;
+      }
+
+      // Suppress all other shortcuts while typing.
+      if (isTypingTarget(e.target)) return;
+
+      const mod = e.metaKey || e.ctrlKey;
+
+      // Ctrl/Cmd + K → Universal Search
+      if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen(true);
         return;
       }
+
+      // Ctrl/Cmd + , → Settings
+      if (mod && !e.shiftKey && !e.altKey && e.key === ",") {
+        e.preventDefault();
+        setShowWelcome(false);
+        openApp("settings");
+        return;
+      }
+
+      // Ctrl/Cmd + Shift + A/B/T → App shortcuts
+      if (mod && e.shiftKey && !e.altKey) {
+        const k = e.key.toLowerCase();
+        const target =
+          k === "a" ? "chat"   :
+          k === "b" ? "browser":
+          k === "t" ? "tasks"  : null;
+        if (target) {
+          e.preventDefault();
+          setShowWelcome(false);
+          openApp(target);
+          return;
+        }
+      }
+
+      // Ctrl+Tab → Mission Control (desktop only)
       if (!isMobile && e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
         setMissionOpen((open) => !open);
@@ -176,7 +223,7 @@ export default function Desktop() {
       window.removeEventListener("keydown", handler);
       window.removeEventListener("om:open-mission", onOpenMission);
     };
-  }, [isMobile, setPaletteOpen]);
+  }, [isMobile, paletteOpen, missionOpen, showWelcome, windows, openApp, setPaletteOpen]);
   const swipeStartX = useRef(null);
   const swipeStartY = useRef(null);
   const swipeLocked = useRef(false);
