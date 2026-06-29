@@ -374,6 +374,7 @@ export default function Browser() {
                 <i className={`fa-solid ${currentUrl ? "fa-lock" : "fa-globe"} text-[9px] flex-shrink-0 ${currentUrl ? "text-[#39FF14]/60" : "text-[#00F0FF]/40"}`} />
               )}
               <input
+                data-testid="browser-url-input"
                 value={addressInput}
                 onChange={(e) => setAddressInput(e.target.value)}
                 onFocus={(e) => e.target.select()}

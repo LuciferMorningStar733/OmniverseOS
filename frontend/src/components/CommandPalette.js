@@ -296,6 +296,7 @@ export default function CommandPalette() {
                 <button
                   key={`${row.source}-${row.id}-${idx}`}
                   data-testid={`palette-result-${row.source}-${idx}`}
+                  aria-selected={isSel}
                   onMouseEnter={() => setSelected(idx)}
                   onClick={() => activate(row)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition"
