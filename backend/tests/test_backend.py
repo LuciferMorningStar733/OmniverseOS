@@ -3,7 +3,7 @@ import os, uuid, time
 import requests
 import pytest
 
-BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") if os.environ.get("REACT_APP_BACKEND_URL") else "https://unified-ai-hub-32.preview.emergentagent.com"
+BASE = (os.environ.get("BACKEND_URL") or os.environ.get("REACT_APP_BACKEND_URL") or "http://localhost:8001").rstrip("/")
 API = f"{BASE}/api"
 
 DEMO = {"email": "demo@omniverse.io", "password": "omniverse123"}
